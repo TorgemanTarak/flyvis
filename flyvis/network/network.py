@@ -30,7 +30,7 @@ from flyvis.utils.dataset_utils import IndexSampler
 from flyvis.utils.nn_utils import n_params, simulation
 from flyvis.utils.tensor_utils import AutoDeref, RefTensor
 
-from .dynamics import NetworkDynamics, PPNeuronIGRSynapses, activation_fns
+from .dynamics import NetworkDynamics, PPNeuronIGRSynapses
 from .initialization import Parameter
 from .sparse import SparseCurrent
 from .stimulus import init_stimulus
@@ -48,7 +48,7 @@ class Network(nn.Module):
         dynamics: Network dynamics configuration.
         node_config: Node parameter configuration.
         edge_config: Edge parameter configuration.
-        backend: ``"scatter"`` (default) or ``"sparse_trainable"``. The latter
+        backend: ``"scatter"`` (default) or ``"csr"``. The latter
             avoids edge-by-batch activations for the default PPNeuronIGRSynapses
             dynamics, with first-order float32/float64 gradients on CPU/CUDA.
 
@@ -139,21 +139,17 @@ class Network(nn.Module):
         # Store the connectome, dynamics, and parameters.
         self.connectome = init_connectome(**connectome)
         self.dynamics = forward_subclass(NetworkDynamics, dynamics)
-        if backend not in ("scatter", "sparse_trainable"):
+        if backend not in ("scatter", "csr"):
             raise ValueError(f"Unknown propagation backend: {backend!r}")
-        if backend == "sparse_trainable" and (
+        if backend == "csr" and (
             type(self.dynamics) is not PPNeuronIGRSynapses
-            or type(self.dynamics.activation) not in tuple(activation_fns.values())
             or getattr(self.dynamics.activation, "inplace", False)
         ):
             raise ValueError(
-                "sparse_trainable requires PPNeuronIGRSynapses with a built-in, "
+                "csr requires PPNeuronIGRSynapses with a built-in, "
                 "out-of-place pointwise activation"
             )
         self.backend = backend
-        # Leave old configurations unchanged unless the new backend is selected.
-        if backend != "scatter":
-            self.config.backend = backend
 
         # Load constant indices into memory.
         # Store source/target indices.
@@ -164,7 +160,7 @@ class Network(nn.Module):
         self.n_edges = len(self.connectome.edges.source_index)
         self._sparse_current = (
             SparseCurrent(self._source_indices, self._target_indices, self.n_nodes)
-            if backend == "sparse_trainable"
+            if backend == "csr"
             else None
         )
 
@@ -896,15 +892,13 @@ class Network(nn.Module):
                     states = self(stimulus(), dt, state=fade_in_state, as_states=True)
                     return (
                         stim.cpu().numpy().squeeze(),
-                        torch
-                        .stack(
+                        torch.stack(
                             [s.nodes.activity.cpu() for s in states],
                             dim=1,
                         )
                         .numpy()
                         .squeeze(),
-                        torch
-                        .stack(
+                        torch.stack(
                             [self.dynamics.currents(s, params).cpu() for s in states],
                             dim=1,
                         )

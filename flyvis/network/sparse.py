@@ -76,16 +76,14 @@ class SparseCurrent(nn.Module):
     def __init__(self, source: Tensor, target: Tensor, num_nodes: int):
         super().__init__()
         if num_nodes < 1 or source.ndim != 1 or source.shape != target.shape:
-            raise ValueError(
-                "sparse_trainable requires 1D source/target arrays and nodes"
-            )
+            raise ValueError("csr requires 1D source/target arrays and nodes")
         if source.dtype not in (torch.int32, torch.int64) or target.dtype not in (
             torch.int32,
             torch.int64,
         ):
-            raise ValueError("sparse_trainable requires integer edge indices")
+            raise ValueError("csr requires integer edge indices")
         if source.device != target.device:
-            raise ValueError("sparse_trainable source/target indices must share a device")
+            raise ValueError("csr source/target indices must share a device")
         if source.numel() and bool(
             (
                 (source < 0)
@@ -94,7 +92,7 @@ class SparseCurrent(nn.Module):
                 | (target >= num_nodes)
             ).any()
         ):
-            raise ValueError("sparse_trainable edge index is out of bounds")
+            raise ValueError("csr edge index is out of bounds")
         self.num_nodes = num_nodes
         self.num_edges = source.numel()
         coordinates, inverse = torch.unique(
@@ -121,9 +119,9 @@ class SparseCurrent(nn.Module):
     def prepare(self, edge_weight: Tensor) -> Tensor:
         """Map current edge weights to unique CSR coordinates, preserving autograd."""
         if edge_weight.shape != (self.num_edges,):
-            raise ValueError("sparse_trainable requires one weight per original edge")
+            raise ValueError("csr requires one weight per original edge")
         if edge_weight.device != self.inverse.device:
-            raise ValueError("sparse_trainable weights and topology must share a device")
+            raise ValueError("csr weights and topology must share a device")
         return edge_weight.new_zeros(self.col.numel()).index_add(
             0, self.inverse, edge_weight
         )
@@ -131,18 +129,16 @@ class SparseCurrent(nn.Module):
     def forward(self, activity: Tensor, values: Tensor) -> Tensor:
         """Sum weighted activated inputs, returning ``[batch, nodes]``."""
         if activity.ndim != 2 or activity.shape[1] != self.num_nodes:
-            raise ValueError("sparse_trainable expects activity shaped [batch, nodes]")
+            raise ValueError("csr expects activity shaped [batch, nodes]")
         if activity.device.type not in ("cpu", "cuda") or activity.dtype not in (
             torch.float32,
             torch.float64,
         ):
-            raise ValueError("sparse_trainable supports float32/float64 on CPU and CUDA")
+            raise ValueError("csr supports float32/float64 on CPU and CUDA")
         if activity.device != values.device or activity.dtype != values.dtype:
-            raise ValueError(
-                "sparse_trainable activity and weights must share device/dtype"
-            )
+            raise ValueError("csr activity and weights must share device/dtype")
         if values.shape != self.col.shape or values.device != self.col.device:
-            raise ValueError("sparse_trainable values must match the prepared CSR layout")
+            raise ValueError("csr values must match the prepared CSR layout")
         return _CSRMM.apply(
             values,
             activity,

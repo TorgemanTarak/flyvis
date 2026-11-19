@@ -1,6 +1,7 @@
 ensemble_and_network_id: ???
 task_name: ???
 train: true
+backend: scatter
 resume: false
 checkpoint_only: false
 network_name: ${task_name}/${ensemble_and_network_id}

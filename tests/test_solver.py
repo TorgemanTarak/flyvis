@@ -1,8 +1,10 @@
 import pytest
 from datamate import set_root_context
+from omegaconf import OmegaConf
 
 from flyvis.solver import MultiTaskSolver
 from flyvis.utils.config_utils import get_default_config
+from flyvis_cli.training.train_single import prepare_config
 
 
 @pytest.fixture(scope="module")
@@ -34,8 +36,39 @@ def test_solver_config():
             "ensemble_and_network_id=0",
         ],
     )
+    assert config.backend == "scatter"
     assert config.task_name == "flow"
     assert config.ensemble_and_network_id == 0
+
+
+@pytest.mark.parametrize("backend", ["csr", None])
+def test_solver_network_backend(tmp_path, backend):
+    overrides = [
+        "task_name=flow",
+        "ensemble_and_network_id=0",
+        "network.connectome.extent=1",
+    ]
+    if backend:
+        overrides.append(f"backend={backend}")
+    args = get_default_config(
+        path="../../flyvis/config/solver.yaml", overrides=overrides, as_namespace=False
+    )
+    config = prepare_config(OmegaConf.create(args))
+    if backend is None:
+        assert "backend" not in config  # Compatible with saved scatter runs.
+    with set_root_context(str(tmp_path)):
+        solver = MultiTaskSolver(
+            "test",
+            config,
+            init_decoder=False,
+            init_task=False,
+            init_optim=False,
+            init_penalties=False,
+            init_scheduler=False,
+        )
+    assert solver.network.backend == (backend or "scatter")
+    assert "backend" not in solver.config.network
+    assert "backend" not in solver.network.config
 
 
 @pytest.mark.slow

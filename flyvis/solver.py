@@ -159,7 +159,9 @@ class MultiTaskSolver:
         initialized = []
 
         if init_network:
-            self.network = Network(**self.config.network)
+            self.network = Network(
+                **self.config.network, backend=self.config.get("backend", "scatter")
+            )
             initialized.append("network")
 
         if init_task:

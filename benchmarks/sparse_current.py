@@ -117,7 +117,7 @@ def main():
     with args.out.open("w", encoding="utf-8") as stream:
         for batch in args.batches:
             for steps in args.steps:
-                for backend in ("scatter", "sparse_trainable"):
+                for backend in ("scatter", "csr"):
                     result = measure(
                         backend, args.extent, batch, steps, args.repeats, args.warmup
                     )

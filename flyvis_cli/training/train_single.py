@@ -114,6 +114,9 @@ def prepare_config(args):
             "description",
         ]
     }
+    # Preserve the saved solver configuration when resuming older scatter runs.
+    if args.get("backend", "scatter") != "scatter":
+        config["backend"] = args.backend
     return config
 
 

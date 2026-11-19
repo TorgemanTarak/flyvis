@@ -93,7 +93,7 @@ def test_real_network_outputs_and_all_gradients(device, activation, dtype):
     torch.set_default_device(device)
     torch.set_default_dtype(dtype)
     reference = make_network("scatter", activation)
-    actual = make_network("sparse_trainable", activation)
+    actual = make_network("csr", activation)
     actual.load_state_dict(reference.state_dict(), strict=True)
     x0 = torch.randn(2, 5, reference.n_nodes) * 0.2
     outputs, inputs, gradients = [], [], []
@@ -122,7 +122,7 @@ def test_real_network_outputs_and_all_gradients(device, activation, dtype):
 @pytest.mark.parametrize("device", DEVICES)
 def test_hooks_initial_state_currents_and_optimizer_updates(device):
     torch.set_default_device(device)
-    reference, actual = make_network("scatter"), make_network("sparse_trainable")
+    reference, actual = make_network("scatter"), make_network("csr")
     actual.load_state_dict(reference.state_dict())
     optimizers = [torch.optim.Adam(m.parameters(), lr=1e-4) for m in (reference, actual)]
 
@@ -153,13 +153,15 @@ def test_hooks_initial_state_currents_and_optimizer_updates(device):
             torch.testing.assert_close(got, expected, atol=1e-9, rtol=1e-7)
     rebuilt = Network(**actual.config)
     rebuilt.load_state_dict(actual.state_dict(), strict=True)
-    assert rebuilt.backend == "sparse_trainable"
+    assert actual.config == reference.config
+    assert "backend" not in actual.config
+    assert rebuilt.backend == "scatter"
     assert set(actual.state_dict()) == set(reference.state_dict())
 
 
 def test_no_edge_batch_activations_saved():
     torch.set_default_device("cpu")
-    model = make_network("sparse_trainable")
+    model = make_network("csr")
     saved_shapes = []
 
     def pack(tensor):
@@ -173,7 +175,7 @@ def test_no_edge_batch_activations_saved():
     assert (model.n_nodes, model.n_nodes) not in saved_shapes
 
 
-@pytest.mark.parametrize("backend", ["scatter", "sparse_trainable"])
+@pytest.mark.parametrize("backend", ["scatter", "csr"])
 def test_forward_inference_then_training(backend):
     torch.set_default_device("cpu")
     model = make_network(backend)
@@ -193,7 +195,7 @@ def test_unsupported_dynamics_and_inplace_activation_rejected():
             Network(
                 connectome=dict(type="ConnectomeFromAvgFilters", extent=1),
                 dynamics=dynamics,
-                backend="sparse_trainable",
+                backend="csr",
             )
 
 
